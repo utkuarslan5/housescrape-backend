@@ -6,7 +6,7 @@ from langchain.schema.output_parser import StrOutputParser
 import pandas as pd
 import modal
 
-stub = modal.Stub("llm-ranking", image=modal.Image.debian_slim().pip_install(["openai", "langchain-openai", "langchain", "pandas"]))
+stub = modal.Stub("llm-ranking", image=modal.Image.debian_slim().pip_install(["openai", "langchain-openai", "langchain"]))
 
 @stub.function(secrets=[modal.Secret.from_name("openai-secret")])                
 def expand_query(original_query, model='gpt-3.5-turbo-0125'):

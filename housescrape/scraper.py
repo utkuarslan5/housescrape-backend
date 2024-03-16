@@ -6,13 +6,12 @@ import modal
 stub = modal.Stub("funda-scraper")
 funda_image = modal.Image.debian_slim(python_version="3.10").run_commands(
     "apt-get update",
-    "apt-get install git -y",
-    "git clone https://github.com/utkuarslan5/funda-scraper.git",
-    "pip install funda-scraper/",
+    "pip install funda-scraper",
 )
 
 # @TODO: add Pydantic V2
 @stub.function(image=funda_image)
+@modal.web_endpoint(method="POST")
 def fetch_properties(search_params):
     """
     Fetches property listings from Funda based on specified search parameters.
@@ -34,6 +33,7 @@ def fetch_properties(search_params):
     
 # @TODO: filter by different properties
 @stub.function(image=funda_image)
+@modal.web_endpoint(method="POST")
 def filter_properties(df, filter_params):
     """
     Apply filters to the DataFrame of property listings based on the given filter parameters.
