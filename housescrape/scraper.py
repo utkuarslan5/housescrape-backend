@@ -1,76 +1,116 @@
 from funda_scraper import FundaScraper
 import pandas as pd
-import modal
+from typing import Dict
+from fastapi import HTTPException
+from modal import Image, Stub, asgi_app, Volume
+from fastapi import FastAPI
+from pydantic import BaseModel, validator
+from typing import Dict, Union, Tuple, Optional
 
-
-stub = modal.Stub("funda-scraper")
-funda_image = modal.Image.debian_slim(python_version="3.10").run_commands(
+stub = Stub("funda-scraper")
+image = Image.debian_slim(python_version="3.10").run_commands(
     "apt-get update",
     "pip install funda-scraper",
 )
 
-# @TODO: add Pydantic V2
-@stub.function(image=funda_image)
-@modal.web_endpoint(method="POST")
-def fetch_properties(search_params):
-    """
-    Fetches property listings from Funda based on specified search parameters.
+vol = Volume.from_name("scraped-houses", create_if_missing=True)
 
-    Parameters:
-    search_params (dict): A dictionary containing search parameters like area, want_to, n_pages, min_price, max_price, and days_since.
+web_app = FastAPI()
 
-    Returns:
-    pandas.DataFrame: A DataFrame containing the fetched property listings.
-    """
-    # Initialize and run the FundaScraper with unpacked search parameters
+# Pydantic models for input validation
+class SearchParams(BaseModel):
+    area: str
+    want_to: str = "rent"
+    n_pages: int = 1
+    min_price: int = 0
+    max_price: int = 1000000
+    days_since: int = 10
+
+class FilterCriteria(BaseModel):
+    house_type: Optional[str] = None
+    building_type: Optional[str] = None
+    price: Optional[Tuple[float, float]] = None
+    price_m2: Optional[Tuple[float, float]] = None
+    room: Optional[Tuple[int, int]] = None
+    bedroom: Optional[Tuple[int, int]] = None
+    bathroom: Optional[Tuple[int, int]] = None
+    living_area: Optional[Tuple[float, float]] = None
+    energy_label: Optional[str] = None
+    zip: Optional[str] = None
+    address: Optional[str] = None
+    year_built: Optional[Tuple[int, int]] = None
+    house_age: Optional[Tuple[int, int]] = None
+
+    # @TODO: Pydantic v2 validation
+    # @validator('*', pre=True)
+    # def check_ranges(cls, v, info):
+    #     field_type = info.get('type_')
+    #     if field_type == Tuple[int, int] or field_type == Tuple[float, float]:
+    #         if not isinstance(v, tuple) or len(v) != 2:
+    #             raise ValueError(f"{info.get('name', 'Unknown')} must be a tuple of two values")
+    #     return v
+
+class FilterParams(BaseModel):
+    filters: FilterCriteria
+
+
+# Endpoint for fetching properties
+@web_app.post("/fetch")
+async def fetch_properties(search_params: dict):
     try:
-        scraper = FundaScraper(**search_params)
+        validated_params = SearchParams(**search_params)
+        scraper = FundaScraper(**validated_params.dict())
         df = scraper.run(raw_data=False, save=False)
-        return df
+        # Save the fetched DataFrame to a file in /data directory
+        with open("/data/fetched_df.json", "w") as f:
+            f.write(df.to_json(orient='records'))
+        vol.commit()
+        return {"message": "Data fetched and saved successfully"}
     except Exception as e:
         print(f"Error in fetch_properties: {e}")
-        return pd.DataFrame()  # Return an empty DataFrame on failure
+        return {"error": str(e)}, 500
     
-# @TODO: filter by different properties
-@stub.function(image=funda_image)
-@modal.web_endpoint(method="POST")
-def filter_properties(df, filter_params):
-    """
-    Apply filters to the DataFrame of property listings based on the given filter parameters.
 
-    Parameters:
-    df (pandas.DataFrame): DataFrame containing property listings.
-    filter_params (dict): A dictionary of filter parameters. Each key is a column name and its value is a tuple representing a range (min, max).
-
-    Returns:
-    pandas.DataFrame: Filtered DataFrame.
-    """
+def __read_fetched_data():
     try:
-        for column, value_range in filter_params.items():
-            if column in df.columns:
-                min_val, max_val = value_range
-                df = df[df[column].between(min_val, max_val)]
-        return df
+        with open("/data/fetched_df.json", "r") as f:
+            data = pd.read_json(f, orient='records')
+        return data
+    except Exception as e:
+        print(f"Error in read_fetched_data: {e}")
+        return {"error": str(e)}, 508
+    
+@web_app.get("/read")
+async def read_fetched_data():
+    try:
+        with open("/data/fetched_df.json", "r") as f:
+            data = pd.read_json(f, orient='records')
+        return data.to_dict(orient='records')  # Convert DataFrame to a dictionary
+    except Exception as e:
+        print(f"Error in read_fetched_data: {e}")
+        return {"error": str(e)}, 508
+
+@web_app.post("/filter")
+async def filter_properties(filter_params: FilterParams):
+    try:
+        # Load DataFrame from JSON string
+        df = __read_fetched_data()
+        criteria = filter_params.filters
+        for column in df.columns:
+            if getattr(criteria, column, None) is not None:
+                filter_value = getattr(criteria, column)
+                if isinstance(filter_value, tuple):
+                    df = df[df[column].between(*filter_value)]
+                else:
+                    df = df[df[column] == filter_value]
+
+        return df.to_json(orient='records')
     except Exception as e:
         print(f"Error in filter_properties: {e}")
-        return df  # Return the unfiltered DataFrame on failure
+        raise HTTPException(status_code=501, detail=str(e))
 
-@stub.local_entrypoint()
-def main():
-    # Test the functions (can be removed in production)
-    test_search_params = {
-        'area': "maastricht",
-        'want_to': "rent",
-        'n_pages': 3,
-        'min_price': 0,
-        'max_price': 2000,
-        'days_since': 30
-    }
-    test_filter_params = {
-        'bedroom': (2, 5)  # Filter for bedrooms in the range of 2 to 5
-    }
-
-    test_properties = fetch_properties.remote(test_search_params)
-    test_filtered_properties = filter_properties.remote(test_properties, test_filter_params)
-
-    print(test_filtered_properties.head())  # Display first few rows for testing
+    
+@stub.function(image=image, volumes={"/data": vol})
+@asgi_app()
+def fastapi_app():
+    return web_app
