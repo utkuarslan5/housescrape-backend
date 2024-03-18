@@ -65,10 +65,10 @@ async def fetch_properties(search_params: dict):
         with open("/data/fetched_df.json", "w") as f:
             f.write(df.to_json(orient='records'))
         vol.commit()
-        return {"message": "Data fetched and saved successfully"}
+        return {'data': df.to_json(orient='records')}
     except Exception as e:
         print(f"Error in fetch_properties: {e}")
-        return {"error": str(e)}, 500
+        raise HTTPException(status_code=500, detail=str(e))
     
 
 def __read_fetched_data():
@@ -78,17 +78,16 @@ def __read_fetched_data():
         return data
     except Exception as e:
         print(f"Error in read_fetched_data: {e}")
-        return {"error": str(e)}, 508
     
 @web_app.get("/read")
 async def read_fetched_data():
     try:
         with open("/data/fetched_df.json", "r") as f:
-            data = pd.read_json(f, orient='records')
-        return data.to_dict(orient='records')  # Convert DataFrame to a dictionary
+            df = pd.read_json(f, orient='records')
+        return {'data': df.to_json(orient='records')} # Convert DataFrame to a dictionary
     except Exception as e:
         print(f"Error in read_fetched_data: {e}")
-        return {"error": str(e)}, 508
+        raise HTTPException(status_code=504, detail=str(e))
 
 @web_app.post("/filter")
 async def filter_properties(filter_params: FilterParams):
@@ -104,7 +103,7 @@ async def filter_properties(filter_params: FilterParams):
                 else:
                     df = df[df[column] == filter_value]
 
-        return df.to_json(orient='records')
+        return {'data': df.to_json(orient='records')}
     except Exception as e:
         print(f"Error in filter_properties: {e}")
         raise HTTPException(status_code=501, detail=str(e))
