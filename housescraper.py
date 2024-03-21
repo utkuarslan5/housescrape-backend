@@ -71,6 +71,7 @@ async def expand_query(original_query: str, model='gpt-3.5-turbo-0125'):
         logger.error(f"Error in expand_query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# TODO: combine expansion and criteria generation to single query, than chain in langchain
 async def generate_evaluation_criteria(criteria_query: str, model='gpt-3.5-turbo-0125'):
     try:  
         client = OpenAI()     
@@ -92,6 +93,7 @@ async def analyze_property(row, query, criterias, model='gpt-3.5-turbo-0125'):
         prompt = f"""
         Task: Analyze the property based on the description and search query, then generate a JSON-only response.
         Determine if the property description mentions the search criteria positively, negatively, or not at all.
+        A final crieria is a match score between 0-1.
 
         Search Query: {query}
         Criterias: {criterias}
@@ -99,6 +101,7 @@ async def analyze_property(row, query, criterias, model='gpt-3.5-turbo-0125'):
         
         Response:
         {{
+        "match score": "0-1",
         "criteria name": "✅/🚫/❔",
         "criteria name": "✅/🚫/❔",
         ...
@@ -119,7 +122,7 @@ async def process_data_frame(df, query, criterias):
         for _, row in df.iterrows():
             result = await analyze_property(row, query, criterias)
             results.append(result)
-        return pd.concat([df, pd.DataFrame(results)], axis=1)
+        return pd.concat([pd.DataFrame(results), df], axis=1).sort_values(by='match score', ascending=False)
     except Exception as e:
         logger.error(f"Error in process_data_frame: {e}")
         raise HTTPException(status_code=500, detail=str(e)) 
