@@ -37,7 +37,10 @@ def main():
         n_pages = st.sidebar.number_input('Number of Pages:', value=1, key="n_pages")
         max_price_search = st.sidebar.number_input('Maximum Price:', value=2000, key="max_price_search")
         days_since = st.sidebar.selectbox('Days Since:', [1, 3, 5, 10, 30], key="days_since")
-        query = st.sidebar.text_area('Enter your query:', 'Student friendly, close to center, spacious')        
+        query = st.sidebar.text_area('Enter your query:',"""Maastricht universitesine yakın veya toplu taşıma ile 20dk mesafede
+                                                            Furnished
+                                                            Paylaşima açık
+                                                            Öğrenciye kiralanabilir, öğrenci kabul eden""")        
 
     if st.sidebar.button("Get 'em", key='search_button'):
         search_params = dict(

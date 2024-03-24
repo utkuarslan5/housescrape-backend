@@ -88,14 +88,14 @@ async def generate_evaluation_criteria(criteria_query: str, model='gpt-3.5-turbo
         logger.error(f"Error in generate_evaluation_criteria: {e}")
         raise HTTPException(status_code=500, detail=str(e))
               
-async def analyze_property(row, query, criterias, model='gpt-3.5-turbo-0125'):
+
+async def analyze_property(row, criterias, model='gpt-3.5-turbo-0125'):
     try:
         prompt = f"""
-        Task: Analyze the property based on the description and search query, then generate a JSON-only response.
-        Determine if the property description mentions the search criteria positively, negatively, or not at all.
-        A final crieria is a match score between 0-1.
+        Task: Translate the description. Analyze the property based on the translated description and search criterias, then generate a JSON-only response.
+        Your task is to determine if the description mentiones the criterias positievely, negatively or not at all.
+        Finally give an overall match score between 0-1.
 
-        Search Query: {query}
         Criterias: {criterias}
         Property Description: {row['descrip']}
         
@@ -116,13 +116,13 @@ async def analyze_property(row, query, criterias, model='gpt-3.5-turbo-0125'):
         logger.error(f"Error in analyze_property: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
-async def process_data_frame(df, query, criterias):
+async def process_data_frame(df, criterias):
     try:
         results = []
         for _, row in df.iterrows():
-            result = await analyze_property(row, query, criterias)
+            result = await analyze_property(row, criterias)
             results.append(result)
-        return pd.concat([pd.DataFrame(results), df], axis=1).sort_values(by='match score', ascending=False)
+        return pd.concat([pd.DataFrame(results), df], axis=1)
     except Exception as e:
         logger.error(f"Error in process_data_frame: {e}")
         raise HTTPException(status_code=500, detail=str(e)) 
@@ -154,7 +154,7 @@ async def fetch_and_analyze(combined_params: CombinedParams):
 
         # Step 4: Process the DataFrame
         logger.info("Analyzing properties based on evaluation criteria.")
-        results_df = await process_data_frame(df, expanded_query, criterias)
+        results_df = await process_data_frame(df, criterias)
 
         logger.info("Process completed successfully. Sending back the data")
         return results_df.to_json(orient='records')
