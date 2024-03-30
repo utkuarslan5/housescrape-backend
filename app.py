@@ -1,11 +1,11 @@
+from langchain_openai.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
 import streamlit as st
+import pandas as pd
 # You may need to import specific libraries for your vector DB
 
 # Placeholder function for database connection (adjust based on your DB)
 def connect_to_vector_db():
-    from langchain_openai.embeddings import OpenAIEmbeddings
-    from langchain_community.vectorstores import Chroma
-
     persist_directory = './data/vecdb/'
 
     db_client = Chroma(persist_directory=persist_directory, 
@@ -15,29 +15,47 @@ def connect_to_vector_db():
 def search_vector_db(query, db_client):
     # Convert query to vector (using your model or method)
     # Perform search in vector database
-    results = db_client.similarity_search(query)
+    results = db_client.similarity_search_with_score(query,)
     # Return top 3 results
-    return results[:3]
+    return results
 
 def display_result(result):
-    import pandas as pd
+    result, score = result
+    st.subheader(f"Match Score: {score:.3f}")
+
     # Extracting and formatting metadata
-    metadata_df = pd.DataFrame([result.metadata]).drop(columns=['url','row','source', 'house_id'])
-    st.table(metadata_df)
-
+    metadata_df = pd.DataFrame([result.metadata])
+    
+    # Using try-except to handle missing columns
+    try:
+        metadata_df.drop(columns=['url', 'row', 'source', 'house_id'], inplace=True)
+        st.table(metadata_df)
+        
+    except KeyError:
+        # Handle the case where one or more columns don't exist
+        st.info("No metadata found, better luck next time!")
+        pass
+    
     # Extracting and displaying description
-    descrip = result.page_content.split('descrip: ')[1] # Assuming description starts after 'descrip: '
-    st.markdown('**Description:**')
-    st.markdown(descrip)
+    try:
+        descrip = result.page_content.split('descrip: ')[1]  # Assuming description starts after 'descrip: '
+        st.markdown('**Description:**')
+        st.markdown(descrip)
+    except IndexError:
+        st.markdown('**Description:** Not available')
 
-    # Providing URL as a clickable link
-    url = result.metadata['url']
-    st.markdown(f'[View Listing]({url})')
-
+    try:
+        url = result.metadata['url']
+        st.markdown(f'[View Listing]({url})\n\n----\n')
+    except KeyError:
+        st.markdown("\n-----\n")
+        pass
+    
 def main():
     import dotenv
     dotenv.load_dotenv()
-    st.title('HouSearch')
+    st.set_page_config(layout="wide")
+    st.title('HouSearch 🏠')
     
     query = st.text_input("Enter your search query:", value="""Er is een gemeubileerd vastgoed te huur met twee slaapkamers, gelegen op een gunstige locatie nabij de Universiteit Maastricht, of bereikbaar binnen 20 minuten met het openbaar vervoer. \n
         Deze accommodatie is beschikbaar voor delen en kan worden gehuurd door studenten, aangezien het studenten accepteert. \n
