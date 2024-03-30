@@ -12,14 +12,6 @@ def connect_to_vector_db():
                 embedding_function=OpenAIEmbeddings())
     return db_client
 
-# def translate_query_to_dutch(query):
-#     from googletrans import Translator
-
-#     translator = Translator()
-#     # Auto-detect source language and translate to Dutch
-#     translated = translator.translate(query, dest='nl')
-#     return translated.text
-
 def search_vector_db(query, db_client):
     # Convert query to vector (using your model or method)
     # Perform search in vector database
@@ -27,43 +19,35 @@ def search_vector_db(query, db_client):
     # Return top 3 results
     return results[:3]
 
-def display_house_details(house):
-    st.subheader(f"House ID: {house['house_id']}")
-    st.write(f"URL: {house['url']}")
-    st.write(f"City: {house['city']}")
-    st.write(f"House Type: {house['house_type']}")
-    st.write(f"Building Type: {house['building_type']}")
-    st.write(f"Price: €{house['price']}")
-    st.write(f"Price per m²: €{house['price_m2']}")
-    st.write(f"Rooms: {house['room']} | Bedrooms: {house['bedroom']} | Bathrooms: {house['bathroom']}")
-    st.write(f"Living Area: {house['living_area']} m²")
-    st.write(f"Energy Label: {house['energy_label']}")
-    st.write(f"Zip Code: {house['zip']}")
-    st.write(f"Address: {house['address']}")
-    st.write(f"Year Built: {house['year_built']}")
-    st.write(f"Age of House: {house['house_age']} years")
-    st.write(f"Description: {house['descrip']}")
+def display_result(result):
+    import pandas as pd
+    # Extracting and formatting metadata
+    metadata_df = pd.DataFrame([result.metadata]).drop(columns=['url','row','source', 'house_id'])
+    st.table(metadata_df)
+
+    # Extracting and displaying description
+    descrip = result.page_content.split('descrip: ')[1] # Assuming description starts after 'descrip: '
+    st.markdown('**Description:**')
+    st.markdown(descrip)
+
+    # Providing URL as a clickable link
+    url = result.metadata['url']
+    st.markdown(f'[View Listing]({url})')
 
 def main():
     import dotenv
     dotenv.load_dotenv()
     st.title('HouSearch')
     
-    query = st.text_input("Enter your search query:", value="""2 yatak odalı
-                        Maastricht universitesine yakın veya toplu taşıma ile 20dk mesafede
-                        EUR 1650 max aylık kirası olan
-                        Furnished
-                        Paylaşima açık
-                        Öğrenciye kiralanabilir, öğrenci kabul eden
-                        İlana max son 1 haftada çıkmış
-                        Kiralık mülkler""")
+    query = st.text_input("Enter your search query:", value="""Er is een gemeubileerd vastgoed te huur met twee slaapkamers, gelegen op een gunstige locatie nabij de Universiteit Maastricht, of bereikbaar binnen 20 minuten met het openbaar vervoer. \n
+        Deze accommodatie is beschikbaar voor delen en kan worden gehuurd door studenten, aangezien het studenten accepteert. \n
+        De maximale maandhuur bedraagt € 1650,- en de advertentie is recentelijk geplaatst, hoogstens binnen de afgelopen week.""")
 
     if query:
         db_client = connect_to_vector_db()
         results = search_vector_db(query, db_client)
 
         for result in results:
-            display_house_details(result)
-
+            display_result(result)
 if __name__ == "__main__":
     main()
