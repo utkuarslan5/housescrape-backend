@@ -1,31 +1,23 @@
-import requests
+import json
+import os
+import re
 import streamlit as st
-import pandas as pd
-from io import StringIO
-from pydantic import BaseModel
 from funda_scraper import FundaScraper
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_community.document_loaders import DataFrameLoader
-from dotenv import load_dotenv, find_dotenv
 from langchain_core.runnables import RunnablePassthrough
 from langchain.callbacks.manager import collect_runs
 from langchain.schema import StrOutputParser
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain, HypotheticalDocumentEmbedder
-import os
 from langsmith import Client
 from streamlit_feedback import streamlit_feedback
 
-load_dotenv(find_dotenv())
-
-os.environ["LANGCHAIN_TRACING_V2"]="true"
-os.environ["LANGCHAIN_ENDPOINT"]="https://api.smith.langchain.com"
-os.environ["LANGCHAIN_API_KEY"]="ls__720c11f30f434eaaa6fff81cd608995d"
-os.environ["LANGCHAIN_PROJECT"]="housearch"
-
 client = Client()
+
+llm = ChatOpenAI(model_name="gpt-3.5-turbo-0125", temperature=0)
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
@@ -54,8 +46,6 @@ prompt = PromptTemplate.from_template("""
     Summary:
     """)    
 
-llm = ChatOpenAI(model_name="gpt-3.5-turbo-0125", temperature=0)
-
 hyde_prompt = """As a Dutch real estate agent, you are tasked with creating an online house ad in Dutch based on a given house description. 
 Please provide a detailed and comprehensive description of the house, including key features, amenities, and any unique selling points that would appeal to potential buyers. 
 Ensure that your ad is engaging, informative, and accurately represents the property in order to attract interested buyers. 
@@ -69,8 +59,6 @@ hyde_prompt = PromptTemplate(input_variables=["description"], template=hyde_prom
 hyde_chain = LLMChain(llm=llm, prompt=hyde_prompt)
 
 hyde_embeddings  = HypotheticalDocumentEmbedder(llm_chain=hyde_chain, base_embeddings=embeddings)
-
-password = "testapp"
 
 feedback_option = (
     "thumbs"
@@ -93,7 +81,7 @@ def create_chroma_db(df, text_column):
     
     db = Chroma.from_documents(
         documents=houses,
-        embedding=embeddings
+        embedding=hyde_embeddings
     )
     st.session_state['db'] = db
     return db
@@ -121,18 +109,20 @@ def format_docs(docs):
 
 def main():
     st.set_page_config(layout="wide")
-    authentication_status = True
+    st.session_state.authentication_status = False
     
-    # with st.empty():
-    #     input_pass = st.text_input("Password", type="password")
-        
-    #     if input_pass and input_pass == password:
-    #         authentication_status = True
-    #     elif input_pass:
-    #         st.error("Wrong password!")
+    login_placeholder = st.empty()
+    input_pass = login_placeholder.text_input("Password", type="password")
     
-    if authentication_status:
+    if input_pass and input_pass == st.secrets.get("PASSWORD"):
+        st.session_state.authentication_status = True
+    elif input_pass:
+        st.error("Wrong password!")
+    
+    if st.session_state.authentication_status:
+        login_placeholder.empty()
         st.title("Real Estate Agent Assistant 🏘️")
+        
         with st.sidebar:
             st.header('🔍')
             area = st.text_input('Area:', help="Area you're interested in", value="maastricht").strip()
@@ -144,100 +134,107 @@ def main():
             # threshold = st.number_input("Similarity Threshold:", value=0.15, key="threshold", min_value=0.0, max_value=1.0)
                     
         if st.sidebar.button("Search", key='search_button'):
-            search_params = dict(
+            st.session_state['search_params'] = dict(
                 area=area,
                 want_to=want_to,
                 n_pages=n_pages,
                 max_price=max_price_search,
                 days_since=days_since
             )
-            
-                
             try:
-                df = fetch_properties(search_params)
+                del st.session_state['run_id']
+            except:
+                pass
+            
+        if st.sidebar.button("Clear", key='clear_button'):
+            for key in st.session_state.keys():
+                del st.session_state[key]
                 
-                # Display error message from server
-                if df is not None:
-                    if not df.empty:
-                        st.session_state['df'] = df
-                        st.success(f"{len(st.session_state['df'])} Listings Fetched!", icon="✅")
+        if st.session_state.get('search_params'):      
+            try:
+                df = fetch_properties(st.session_state.search_params)
+                if df is not None and not df.empty:
+                    st.session_state['df'] = df
+                    with st.expander(f"{len(st.session_state['df'])} Listings Fetched! ✅"):
+                       
                         st.data_editor(st.session_state['df'],
                                     column_config= {
                                         
                                     },
                                         hide_index=True,
                                     )
-                        df_to_embed = df.copy()
-                        df_to_embed['photo'] = df_to_embed['photo'].apply(single_photo)
-                        db = create_chroma_db(df_to_embed, "descrip")
-                        st.session_state['db'] = db
-                    else:
-                        st.warning("Either no houses found or caught Funda's bot detection. Try later or different parameters!", icon="🤖")
+                    df_to_embed = df.copy()
+                    df_to_embed['photo'] = df_to_embed['photo'].apply(single_photo).fillna(value='')
+                    db = create_chroma_db(df_to_embed, "descrip")
+                    st.session_state['db'] = db
+                else:
+                    st.warning("Either no houses found or caught Funda's bot detection. Try later or different parameters!", icon="🤖")
             except Exception as e:
                 st.error(f"If you're seeing this, it means smth I couldn't foresee went wrong. \n{e}", icon="🚨")
         
+        if st.session_state.get('db') and st.session_state.get('query'):
+            
+            db = st.session_state.get('db')
+            retriever = db.as_retriever(search_kwargs={'k': 3})
             rag_chain = (
-                        # {"listings": retriever | format_docs, "query": RunnablePassthrough()}
-                        prompt
+                        {"listings": retriever | format_docs, "query": RunnablePassthrough()}
+                        | prompt
                         | llm
                         | StrOutputParser()
                     )
             
-            if st.session_state.query and not df.empty:
-                db = st.session_state.get('db')
-                
-                with st.spinner("Analyzing..."):
+            with st.spinner("Analyzing..."):
+                if not st.session_state.get("run_id"):
                     with collect_runs() as cb:
                         # Perform search
-                        embedded_query = hyde_embeddings.embed_query(str(search_params)+str(query))
-
-                        docs = format_docs(db.similarity_search_by_vector(embedded_query, k=2))
-                        
-                        response = rag_chain.invoke({"listings":docs, "query": query})
-                        st.markdown(response, unsafe_allow_html=True)
+                        response = rag_chain.invoke(json.dumps(st.session_state.search_params, indent=1)+" "+str(query))
+                        response = re.sub(r"`{3}", "", str(response)) # clean accidental backticks that fuck up the md rendering
+                        st.session_state['response'] = response
                         st.session_state.run_id = cb.traced_runs[1].id
-                        print(f"Run ID: {cb.traced_runs[1].id}")
+            
+            st.markdown(st.session_state.response, unsafe_allow_html=True)
+                
                     
-                if st.session_state.get("run_id"):
-                    run_id = st.session_state.run_id
-                    feedback = streamlit_feedback(
-                        feedback_type=feedback_option,
-                        optional_text_label="[Optional] Please provide an explanation",
-                        key=f"feedback_{run_id}",
-                    )
+            if st.session_state.get("run_id"):
+                run_id = st.session_state.run_id
+                feedback = streamlit_feedback(
+                    feedback_type=feedback_option,
+                    optional_text_label="[Optional] Please provide an explanation",
+                    key=f"feedback_{run_id}",
+                )
 
-                    # Define score mappings for both "thumbs" and "faces" feedback systems
-                    score_mappings = {
-                        "thumbs": {"👍": 1, "👎": 0},
-                        "faces": {"😀": 1, "🙂": 0.75, "😐": 0.5, "🙁": 0.25, "😞": 0},
-                    }
+                # Define score mappings for both "thumbs" and "faces" feedback systems
+                score_mappings = {
+                    "thumbs": {"👍": 1, "👎": 0},
+                    "faces": {"😀": 1, "🙂": 0.75, "😐": 0.5, "🙁": 0.25, "😞": 0},
+                }
 
-                    # Get the score mapping based on the selected feedback option
-                    scores = score_mappings[feedback_option]
+                # Get the score mapping based on the selected feedback option
+                scores = score_mappings[feedback_option]
 
-                    if feedback:
-                        # Get the score from the selected feedback option's score mapping
-                        score = scores.get(feedback["score"])
+                if feedback:
+                    # Get the score from the selected feedback option's score mapping
+                    score = scores.get(feedback["score"])
 
-                        if score is not None:
-                            # Formulate feedback type string incorporating the feedback option
-                            # and score value
-                            feedback_type_str = f"{feedback_option} {feedback['score']}"
+                    if score is not None:
+                        # Formulate feedback type string incorporating the feedback option
+                        # and score value
+                        feedback_type_str = f"{feedback_option} {feedback['score']}"
 
-                            # Record the feedback with the formulated feedback type string
-                            # and optional comment
-                            feedback_record = client.create_feedback(
-                                run_id,
-                                feedback_type_str,
-                                score=score,
-                                comment=feedback.get("text"),
-                            )
-                            st.session_state.feedback = {
-                                "feedback_id": str(feedback_record.id),
-                                "score": score,
-                            }
-                        else:
-                            st.warning("Invalid feedback score.")
+                        # Record the feedback with the formulated feedback type string
+                        # and optional comment
+                        feedback_record = client.create_feedback(
+                            run_id,
+                            feedback_type_str,
+                            score=score,
+                            comment=feedback.get("text"),
+                        )
+                        st.session_state.feedback = {
+                            "feedback_id": str(feedback_record.id),
+                            "score": score,
+                        }
+                    else:
+                        st.warning("Invalid feedback score.")   
 
 
 if __name__ == "__main__":
