@@ -1,0 +1,7 @@
+streamlit
+git+https://github.com/utkuarslan5/funda-scraper.git
+pandas
+langchain
+langchain_openai
+langchain_community
+streamlit_feedback

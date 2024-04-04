@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import streamlit as st
 from funda_scraper import FundaScraper
