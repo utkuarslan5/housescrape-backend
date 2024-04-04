@@ -1,5 +1,6 @@
 import json
 import re
+import os
 import streamlit as st
 from funda_scraper import FundaScraper
 from langchain_openai import OpenAIEmbeddings
@@ -13,6 +14,10 @@ from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain, HypotheticalDocumentEmbedder
 from langsmith import Client
 from streamlit_feedback import streamlit_feedback
+
+os.environ["LANGCHAIN_TRACING_V2"]="true"
+os.environ["LANGCHAIN_ENDPOINT"]="https://api.smith.langchain.com"
+os.environ["LANGCHAIN_PROJECT"]="housearch"
 
 client = Client()
 
