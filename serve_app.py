@@ -25,7 +25,7 @@ import modal
 # The `app.py` script imports three third-party packages, so we include these in the example's
 # image definition.
 
-image = modal.Image.debian_slim(python_version="3.10").run_commands("apt-get update","apt-get install git -y").pip_install_from_requirements(
+image = modal.Image.debian_slim(python_version="3.10.12").run_commands("apt-get update","apt-get install git -y").pip_install_from_requirements(
     "requirements.txt",
     )
 
@@ -37,7 +37,7 @@ stub = modal.Stub(name="housesearch-streamlit", image=image)
 # [`Mount`](https://modal.com/docs/guide/local-data#mounting-directories).
 
 streamlit_script_local_path = Path(__file__).parent / "app_modal.py"
-streamlit_script_remote_path = Path("/root/app.py")
+streamlit_script_remote_path = Path("/root/app_modal.py")
 
 if not streamlit_script_local_path.exists():
     raise RuntimeError(
