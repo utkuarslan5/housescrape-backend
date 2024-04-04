@@ -3,3 +3,4 @@ __pycache__/app.cpython-310.pyc
 __pycache__/serve_app.cpython-310.pyc
 data/combined_buy.csv
 .env
+.streamlit/secrets.toml
