@@ -167,7 +167,7 @@ def main():
                        
                         st.data_editor(st.session_state['df'],
                                     column_config= {
-                                        
+                                        "url": st.column_config.LinkColumn("url")
                                     },
                                         hide_index=True,
                                     )
