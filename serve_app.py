@@ -25,9 +25,16 @@ import modal
 # The `app.py` script imports three third-party packages, so we include these in the example's
 # image definition.
 
-image = modal.Image.debian_slim().pip_install("streamlit", "numpy", "pandas")
+image = modal.Image.debian_slim(python_version="3.10").run_commands("apt-get update","apt-get install git -y").pip_install(
+    "streamlit",
+    "git+https://github.com/utkuarslan5/funda-scraper.git",
+    "pandas", 
+    "langchain", 
+    "langchain_openai", 
+    "langchain_community", 
+    "streamlit_feedback")
 
-stub = modal.Stub(name="housescrape-streamlit", image=image)
+stub = modal.Stub(name="housesearch-streamlit", image=image)
 
 # ## Mounting the `app.py` script
 #
