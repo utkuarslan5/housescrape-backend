@@ -138,7 +138,7 @@ def main():
             n_pages = st.sidebar.number_input('Number of Pages:', value=1, key="n_pages")
             max_price_search = st.sidebar.number_input('Maximum Price:', value=2000, key="max_price_search")
             days_since = st.sidebar.selectbox('Days Since:', [1, 3, 5, 10, 30], key="days_since")
-            query = st.text_input("Search Query:", value="spacious house with lost of light and potentially with a garden an near the city center", key="query") 
+            query = st.text_area("Search Query:", value="spacious house with lost of light and potentially with a garden an near the city center", key="query") 
             # threshold = st.number_input("Similarity Threshold:", value=0.15, key="threshold", min_value=0.0, max_value=1.0)
                     
         if st.sidebar.button("Search", key='search_button'):
