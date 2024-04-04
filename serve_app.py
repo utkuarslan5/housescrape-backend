@@ -25,14 +25,9 @@ import modal
 # The `app.py` script imports three third-party packages, so we include these in the example's
 # image definition.
 
-image = modal.Image.debian_slim(python_version="3.10").run_commands("apt-get update","apt-get install git -y").pip_install(
-    "streamlit",
-    "git+https://github.com/utkuarslan5/funda-scraper.git",
-    "pandas", 
-    "langchain", 
-    "langchain_openai", 
-    "langchain_community", 
-    "streamlit_feedback")
+image = modal.Image.debian_slim(python_version="3.10").run_commands("apt-get update","apt-get install git -y").pip_install_from_requirements(
+    "requirements.txt",
+    )
 
 stub = modal.Stub(name="housesearch-streamlit", image=image)
 
@@ -41,12 +36,12 @@ stub = modal.Stub(name="housesearch-streamlit", image=image)
 # We can just mount the `app.py` script inside the container at a pre-defined path using a Modal
 # [`Mount`](https://modal.com/docs/guide/local-data#mounting-directories).
 
-streamlit_script_local_path = Path(__file__).parent / "app.py"
+streamlit_script_local_path = Path(__file__).parent / "app_modal.py"
 streamlit_script_remote_path = Path("/root/app.py")
 
 if not streamlit_script_local_path.exists():
     raise RuntimeError(
-        "app.py not found! Place the script with your streamlit app in the same directory."
+        "app_modal.py not found! Place the script with your streamlit app in the same directory."
     )
 
 streamlit_script_mount = modal.Mount.from_local_file(
@@ -63,6 +58,7 @@ streamlit_script_mount = modal.Mount.from_local_file(
 @stub.function(
     allow_concurrent_inputs=100,
     mounts=[streamlit_script_mount],
+    secrets=[modal.Secret.from_name("langsmith-secret"), modal.Secret.from_name("openai-secret"), modal.Secret.from_name("password")]
 )
 @modal.web_server(8000)
 def run():
