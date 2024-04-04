@@ -6,4 +6,4 @@ langchain_openai
 langchain_community
 streamlit_feedback
 chromadb
-sqlite3 >= 3.35.0
+pysqlite3
