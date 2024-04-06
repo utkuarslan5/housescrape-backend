@@ -82,7 +82,7 @@ def fetch_properties(search_params: dict):
     except Exception as e:
         st.error(f"Error in while fetching properties: {e}")
 
-@st.cache_resource
+# @st.cache_resource
 def create_chroma_db(df, text_column):
     loader = DataFrameLoader(df, page_content_column=text_column)
     houses = loader.load()
