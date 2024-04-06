@@ -91,6 +91,7 @@ def create_chroma_db(df, text_column):
         documents=houses,
         embedding=hyde_embeddings
     )
+    print(db)
     st.session_state['db'] = db
     return db
 
