@@ -5,4 +5,4 @@ langchain_openai
 langchain_community
 streamlit_feedback
 pysqlite3-binary
-chromadb
+faiss-cpu

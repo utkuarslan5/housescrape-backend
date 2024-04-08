@@ -8,7 +8,7 @@ import os
 import streamlit as st
 from funda_scraper import FundaScraper
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import DataFrameLoader
 from langchain_core.runnables import RunnablePassthrough
 from langchain.callbacks.manager import collect_runs
@@ -18,6 +18,9 @@ from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain, HypotheticalDocumentEmbedder
 from langsmith import Client
 from streamlit_feedback import streamlit_feedback
+import logging
+
+logger = logging.getLogger(__name__)
 
 os.environ["LANGCHAIN_TRACING_V2"]="true"
 os.environ["LANGCHAIN_ENDPOINT"]="https://api.smith.langchain.com"
@@ -82,16 +85,15 @@ def fetch_properties(search_params: dict):
     except Exception as e:
         st.error(f"Error in while fetching properties: {e}")
 
-# @st.cache_resource
-def create_chroma_db(df, text_column):
+@st.cache_resource
+def create_vector_db(df, text_column):
     loader = DataFrameLoader(df, page_content_column=text_column)
     houses = loader.load()
     
-    db = Chroma.from_documents(
+    db = FAISS.from_documents(
         documents=houses,
         embedding=hyde_embeddings
     )
-    print(db)
     st.session_state['db'] = db
     return db
 
@@ -174,7 +176,7 @@ def main():
                                     )
                     df_to_embed = df.copy()
                     df_to_embed['photo'] = df_to_embed['photo'].apply(single_photo).fillna(value='')
-                    db = create_chroma_db(df_to_embed, "descrip")
+                    db = create_vector_db(df_to_embed, "descrip")
                     st.session_state['db'] = db
                 else:
                     st.warning("Either no houses found or caught Funda's bot detection. Try later or different parameters!", icon="🤖")
